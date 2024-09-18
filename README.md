@@ -1,12 +1,12 @@
-#Applied Data Scientist and Data Analyst
+# Applied Data Scientist and Data Analyst
 
-###Education 
+### Education 
 University of Massachusetts Amherst (Class of 2024) 
    Master of Science in Data Analytics and Computational Social Science, Cumulative GPA: 3.96/4.00  
 Trinity College (Class of 2020) 
    Bachelor of Arts in Public Policy and Law/Middle Eastern Studies, Cumulative GPA: 3.6/4.00
 
-###Projects
+### Projects
 Immigration Attitudes and Partisanship Analysis 
 • Performed data cleaning and analysis of 7000 ANES survey samples, employing time series regression and mediation analysis. 
 • Discovered significant increases in immigration attitudes among liberals and Dem
