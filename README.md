@@ -9,7 +9,7 @@ Trinity College (Class of 2020)
 ### Projects
 Immigration Attitudes and Partisanship Analysis 
 • Performed data cleaning and analysis of 7000 ANES survey samples, employing time series regression and mediation analysis. 
-• Discovered significant increases in immigration attitudes among liberals and Dem
+• Discovered significant increases in immigration attitudes among liberals and Democrats
 
 ### Work Experience 
 
