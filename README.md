@@ -11,6 +11,13 @@ Immigration Attitudes and Partisanship Analysis
 • Performed data cleaning and analysis of 7000 ANES survey samples, employing time series regression and mediation analysis. 
 • Discovered significant increases in immigration attitudes among liberals and Democrats
 
+### Housing Data Price Prediction
+• Utilized machine learning techniques including Principal Component Analysis (PCA), Ridge and
+Lasso Regression, and Boosted Tree Models.
+• Conducted comprehensive analysis to evaluate the predictability and interpretability trade-offs
+among these models for house price prediction, utilizing training data to assess and compare their
+accuracy and performance.
+
 ### Work Experience 
 
 Berry Appleman & Leiden LLP	- New York, NY
