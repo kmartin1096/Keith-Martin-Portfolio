@@ -1,4 +1,4 @@
-# Applied Data Scientist and Data Analyst
+# Applied Data Scientist and Data Analyst Portfolio
 
 ### Education 
 University of Massachusetts Amherst (Class of 2024) 
