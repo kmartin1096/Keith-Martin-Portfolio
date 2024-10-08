@@ -1,0 +1,609 @@
+---
+title: "KeithMartin_FinalProject_Code"
+author: "Keith Martin"
+date: "2023-12-15"
+output: html_document
+---
+
+```{r}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(sjstats)
+  library(haven)
+  library(lme4)
+  library(arm)
+  library(modelsummary)
+  library(ggplot2)
+  library(stargazer)
+  library(janitor)
+  library(ggeffects)
+  library(survey)
+  library(dplyr)
+  library(ggplot2)
+  library(tidyr)
+  library(gridExtra)
+  library(descr)
+  library(Amelia)
+  library(mi)
+})
+```
+
+```{r}
+suppressWarnings({
+  anes <- read_csv("C:/Users/kmart/Downloads/anes_timeseries_cdf_csv_20220916.csv")
+})
+
+```
+
+```{r}
+anes <- anes %>%
+  filter(VCF0004 %in% c(2008, 2020)) %>%
+  mutate(year_label = ifelse(VCF0004 < 2020, "pre_covid", "post_covid"),
+         year = ifelse(VCF0004 < 2020, 0, 1))
+#Pre and post covid
+
+#Flipping reversed scales and cleaning where necessary
+anes <- anes %>%
+  mutate(imm_job = case_when(
+    VCF9223 == 1 ~ 4,
+    VCF9223 == 2 ~ 3,
+    VCF9223 == 3 ~ 2,
+    VCF9223 == 4 ~ 1,
+    VCF9223 <= -1 ~ NA_real_
+  ))
+
+anes <- anes %>%
+  mutate(imm_num = case_when(
+    VCF0879 == 1 ~ 5,
+    VCF0879 == 2 ~ 4,
+    VCF0879 == 3 ~ 3,
+    VCF0879 == 4 ~ 2,
+    VCF0879 == 5 ~ 1,
+    VCF0879 <= -1 ~ NA_real_,
+    VCF0879 >= 7 ~ NA_real_
+  ))
+
+anes <- anes %>%
+  mutate(imm_numfac = case_when(
+    VCF0879 == 1 ~ "Decreased a lot",
+    VCF0879 == 2 ~ "Decreased a little",
+    VCF0879 == 3 ~ "Same as now",
+    VCF0879 == 4 ~ "Increased a little",
+    VCF0879 == 5 ~ "Increased a lot",
+    VCF0879 <= -1 ~ NA_character_
+  ))
+
+
+anes <- anes %>%
+  mutate(partyID_fact = case_when(
+    VCF0301 == 1 ~ 'Strong D', 
+    VCF0301 == 2 ~ 'Weak D',
+    VCF0301 == 3 ~ 'Ind Lean D',
+    VCF0301 == 4 ~ 'IND',
+    VCF0301 == 5 ~ 'Ind Lean R',
+    VCF0301 == 6 ~ 'Weak R', 
+    VCF0301 == 7 ~ 'Strong R',
+    TRUE ~ NA_character_
+  ))
+  
+anes <- anes %>%
+  mutate(partyID_num = case_when(
+    is.na(VCF0301) ~ NA_integer_,
+    VCF0301 == 1 ~ 1, 
+    VCF0301 == 2 ~ 2,
+    VCF0301 == 3 ~ 3,
+    VCF0301 == 4 ~ 4,
+    VCF0301 == 5 ~ 5,
+    VCF0301 == 6 ~ 6, 
+    VCF0301 == 7 ~ 7,
+    TRUE ~ NA_integer_
+  ))
+  
+
+
+
+anes <- anes %>%
+  mutate(libcon = replace(VCF0803, (VCF0803<= -1 | VCF0803 >= 9), NA))
+
+
+anes <- anes %>%
+  mutate(alien_therm = replace(VCF0233, (VCF0233 == 98 | VCF0233 == 99), NA))
+
+anes <- anes%>%
+  mutate(education = case_when(
+    VCF0110 == 1 ~ "No Education",
+    VCF0110 == 2 ~ "High School",
+    VCF0110 == 3 ~ "Some College",
+    VCF0110 == 4 ~ "Bachelor's or Higher"
+  ))
+
+
+
+anes <- anes %>%
+  mutate(gender = case_when(
+    VCF0104 == 1 ~ "Male",
+    VCF0104 == 2 ~ "Female",
+    is.na(VCF0104) | VCF0104 <= 0 ~ NA_character_
+  ))
+
+
+anes <- anes %>%
+  mutate(employment_status = case_when(
+    VCF0116 == 1 ~ 'Working now', 
+    VCF0116 == 2 ~ 'Temporarily laid off',
+    VCF0116 == 4 ~ 'Unemployed',
+    VCF0116 == 5 ~ 'Retired',
+    VCF0116 == 6 ~ 'Permanently disabled',
+    VCF0116 == 7 ~ 'Homemaker', 
+    VCF0116 == 8 ~ 'Student',
+    TRUE ~ NA_character_
+  ))
+
+anes <- anes %>%
+  mutate(age = replace(VCF0101, VCF0101 <= -1, NA))
+
+age_breaks <- c(18, 30, 40, 50, 65, 100)
+
+# Create a new variable with age groups
+anes$age_group <- cut(anes$age, 
+                      age_breaks, labels = c("18-29", "30-39", "40-49", "50-64", "65+"), 
+                      include.lowest = TRUE)
+
+anes <- anes %>%
+  mutate(race = case_when(
+    VCF0105a == 1 ~ "White",
+    VCF0105a == 2 ~ "Black Non-Hispanic",
+    VCF0105a == 3 ~ "Asian/Pacific Islander",
+    VCF0105a == 4 ~ "American Native American",
+    VCF0105a == 5 ~ "Hispanic",
+    VCF0105a %in% c(6, 7) ~ "Other/Non-White/Non Black",
+    VCF0105a <= 0 | VCF0071c >= 8 ~ NA_character_,
+    TRUE ~ NA_character_
+  ))
+
+anes <- anes %>%
+  mutate(income = case_when(
+    VCF0114 <= 0 ~ NA_real_,
+    TRUE ~ VCF0114))
+```
+
+
+```{r}
+#DV Distributions
+suppressWarnings({
+  ggplot(anes, aes(x = alien_therm)) +
+    geom_histogram() +
+    labs(x = "Illegal Alien Feeling Thermometer",
+         y = "Count")
+})
+
+```
+
+```{r}
+#DV Distributions
+ggplot(anes, aes(x = imm_num)) +
+  geom_histogram() +
+  labs(x = "INCREASE OR DECREASE NUMBER OF IMMIGRANTS TO U.S",
+       y = "Count")+
+  scale_x_continuous(breaks = 1:5,
+    labels = c(" Decreased a lot", " Decreased a little", "Same as Now", "Increased a little", "Increased a lot"))
+```
+
+```{r}
+#Mediator Distribution
+ggplot(anes, aes(x = imm_job)) +
+  geom_histogram() +
+  labs(x = "How Likely Is It That Recent Immigration Levels Will Take Jobs Away From People Already Here",
+       y = "Count")+
+  scale_x_continuous(breaks = 1:4,
+    labels = c("Not at all likely", "Somewhat Likely", "Very Likely", "Extremely Likely"))
+```
+# Mediation Analysis
+```{r}
+# Creating a subset with complete cases for specified columns
+complete_data <- anes[complete.cases(anes[, c("alien_therm", "partyID_num", "imm_job", "libcon", "education", "age_group", "race", "gender", "employment_status", "income")]), ]
+#Linear regressions for mediation
+model_m <- lm(imm_job ~ partyID_num + libcon + education + age_group + race + gender + employment_status + year+ income, data = complete_data, weights = VCF0009z)
+model_y <- lm(alien_therm ~ partyID_num + + imm_job+ libcon + education + age_group + race + gender + employment_status + year+ income, data = complete_data, weights = VCF0009z)
+
+```
+
+
+
+```{r}
+suppressPackageStartupMessages({library(mediation)
+
+# Running mediation analysis
+results <- mediate(model_m, model_y, treat = 'partyID_num', mediator = 'imm_job', boot = TRUE, sims = 500)})
+```
+
+```{r}
+#Summary of Mediation Analysis
+summary(results)
+```
+
+
+```{r}
+library(diagram)
+data <- c(0, "'-0.597*'", 0,
+          0, 0, 0, 
+          "'-2.776(21.5%) *'", "'-2.179*'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Immigrant's Taking Jobs","Party Id", "Attitide Illegal Immigrants"), 
+                box.type = "rect", box.size = 0.18, box.prop=0.3,  curve=0,
+                main = "Party ID Mediation Plot")
+```
+
+
+
+
+```{r}
+#Graph of Mediation Analysis
+plot(results, 
+     main = "Mediated Effect of Immigrant Jobs and Attitude toward Illegal Aliens with Party ID", 
+     xlab = "Impact on Immigration Attitude",
+     cex.main = 0.8)
+```
+
+```{r}
+install(diagram)
+library(diagram)
+data <- c(0, "'.47*'", 0,
+          0, 0, 0, 
+          "'.36*'", "'.33* (.16)'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Math self-efficacy","Math ability", "Interest in the math major"), 
+                box.type = "rect", box.size = 0.12, box.prop=0.5,  curve=0)
+```
+
+
+```{r}
+#Mediation analysis with other treatment
+results2 <- mediate(model_m, model_y, treat = 'libcon', mediator = 'imm_job', boot = TRUE, sims = 500)
+summary(results2)
+```
+```{r}
+data <- c(0, "'-0.962*'", 0,
+          0, 0, 0, 
+          "'-4.210 (22.9%) *'", "'-3.247'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Immigrant's Taking Jobs","Liberal/Conservative", "Attitide Illegal Immigrants"), 
+                box.type = "rect", box.size = 0.18, box.prop=0.3,  curve=0,
+                main = "Liberal Conservative Mediation Plot")
+```
+
+
+```{r}
+#Graph of Mediation Analysis
+plot(results2, 
+     main = "Mediated Effect of Immigrant Jobs and Attitude toward Illegal Aliens with Liberal Conservative Scale", 
+     xlab = "Impact on Immigration Attitude",
+     cex.main = 0.6)
+```
+
+
+```{r}
+#Regressions for Mediation analysis with different DV
+model_m2 <- lm(imm_job ~ partyID_num + imm_num + libcon + education + age_group + race + gender + employment_status + year + income, data = complete_data, weights = VCF0009z)
+
+model_y2 <- lm(imm_num ~ partyID_num + + imm_job + libcon + education + age_group + race + gender + employment_status + year + income, data = complete_data, weights = VCF0009z)
+
+results3 <- mediate(model_m2, model_y2, treat = 'partyID_num', mediator = 'imm_job', boot = TRUE, sims = 500)
+
+#Summary of Mediation Results
+summary(results3)
+```
+
+```{r}
+#Plot Results
+plot(results3, 
+     main = "Mediated Effect of Immigrant Jobs and The Number of Immigrants with Party ID", 
+     xlab = "Impact on Number of Immigrants",
+     cex.main = 0.6)
+```
+
+```{r}
+data <- c(0, "'-0.0221*'", 0,
+          0, 0, 0, 
+          "'-.0710 (31.17%) *'", "'-.0488*'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Immigrant's Taking Jobs","Party ID", "Number of Immigrants"), 
+                box.type = "rect", box.size = 0.18, box.prop=0.3,  curve=0,
+                main = "Party ID Mediation Plot with Number of Immigrants")
+```
+
+
+```{r}
+#Mediation with different IV
+results4 <- mediate(model_m2, model_y2, treat = 'libcon', mediator = 'imm_job', boot = TRUE, sims = 500)
+summary(results4)
+```
+```{r}
+data <- c(0, "'-0.0291*'", 0, 
+          0, 0, 0, 
+          "'-.1655 (17.59%) *'", "'-.1364'", 0)
+M<- matrix (nrow=3, ncol=3, byrow = TRUE, data=data)
+plot<- plotmat (M, pos=c(1,2), 
+                name= c( "Immigrant's Taking Jobs","Liberal Conservative", "Number of Immigrants"), 
+                box.type = "rect", box.size = 0.18, box.prop=0.3,  curve=0,
+                main = "Liberal Conservative Mediation Plot with Number of Immigrants")
+```
+
+
+
+```{r}
+#Graph of mediation results
+plot(results4, 
+     main = "Mediated Effect of Immigrant Jobs and The Number of Immigrants with Liberal Conservative Scale", 
+     xlab = "Impact on Number of Immigrants",
+     cex.main = 0.6)
+```
+
+## Role of Time
+
+#Illegal Alien Feeling Thermometer Interaction
+
+```{r}
+#Time Interaction with alien therm DV
+lm1 <- lm(alien_therm ~ as.factor(partyID_num) * year  + imm_job  + libcon + education + age_group + race + gender + employment_status + income,  data = complete_data, weights = VCF0009z)
+
+lm2 <- lm(alien_therm ~ as.factor(partyID_num) + libcon * year  + imm_job  + education + age_group + race + gender + employment_status + income,  data = complete_data, weights = VCF0009z)
+
+```
+
+```{r}
+#Stargazer results
+stargazer(lm1, lm2, type = "text",
+          digits = 3,
+          dep.var.labels=c("Illegal Alien Thermometer"),
+          covariate.labels = c("Weak Democrat", "Lean Democrat", "Independent", "Lean Republican", "Weak Republican", "Strong Republican", "Year","Belief Immigrants Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 -64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permanently Disabled", "Retired", "Student", "Temporarily  Laid Off", "Unemployed", "Working Now", "Income", "Weak Democrat by Year", "Lean Democrat by Year", "Independent by Year", "Lean Republican by Year", "Weak Republican by Year", "Strong Republican by Year", "Liberal Conservative Scale by Year"),
+          )
+```
+```{r}
+stargazer(lm1, lm2, type = "text",
+          digits = 3,
+          dep.var.labels = c("Illegal Alien Thermometer"),
+          covariate.labels = c("Weak Democrat", "Lean Democrat", "Independent", "Lean Republican", "Weak Republican", "Strong Republican", "Year","Belief Immigrants Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 -64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permanently Disabled", "Retired", "Student", "Temporarily  Laid Off", "Unemployed", "Working Now", "Income", "Weak Democrat by Year", "Lean Democrat by Year", "Independent by Year", "Lean Republican by Year", "Weak Republican by Year", "Strong Republican by Year", "Liberal Conservative Scale by Year"),
+          star.cutoffs = c(0.05, 0.01, 0.001))
+
+```
+
+```{r}
+output <- capture.output({
+  stargazer(lm1, lm2, type = "text",
+            digits = 3,
+            dep.var.labels = c("Illegal Alien Thermometer"),
+            covariate.labels = c("Weak Democrat", "Lean Democrat", "Independent", "Lean Republican", "Weak Republican", "Strong Republican", "Year","Belief Immigrants Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 -64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permanently Disabled", "Retired", "Student", "Temporarily  Laid Off", "Unemployed", "Working Now", "Income", "Weak Democrat by Year", "Lean Democrat by Year", "Independent by Year", "Lean Republican by Year", "Weak Republican by Year", "Strong Republican by Year", "Liberal Conservative Scale by Year"),
+            star.cutoffs = c(0.05, 0.01, 0.001))
+}, type = "output")
+
+# Save output to a text file
+writeLines(output, "stargazer_output.txt")
+
+# Convert text file to image using magick
+library(magick)
+img <- image_read("stargazer_output.txt")
+image_write(img, path = "stargazer_output.png")
+```
+
+```{r}
+# Read the text output from the file
+output <- paste(readLines("stargazer_output.txt"), collapse = "\n")
+
+# Plot the text output
+png("stargazer_output.png", width = 1000, height = 1000)
+plot.new()
+text(x = 0.5, y = 0.5, output, adj = c(0.5, 0.5), cex = 1.2, font = 2)
+dev.off()
+
+```
+
+
+
+```{r}
+#Graph of Libcon interaction predicted values
+df1 <-ggpredict(lm2, terms=c("libcon", "year"))
+
+ggplot(df1, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Lib Con Scale",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Predicted Values for Alien Thermometer Based on Liberal/Cons Scale"
+  ) +
+  scale_x_continuous(
+    breaks = 1:7,
+    labels = c(
+      "Extremely liberal", "Liberal", "Slightly liberal", "Moderate",
+      "Slightly conservative", "Conservative", "Extremely conservative"
+    )
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+
+```
+
+
+```{r}
+#Graph of Party ID predicted values
+df2 <-ggpredict(lm1, terms=c("partyID_num", "year"))
+
+ggplot(df2, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Party ID",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Illegal Alien Feeling Thermometer for Party ID"
+  ) +
+  scale_x_continuous(
+    breaks = 1:7,
+    labels = c("Strong D", "Weak D", "Ind Lean D", "IND", "Ind Lean R", "Weak R", "Strong R")
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis lab
+```
+
+
+```{r}
+#Employment Status Graph
+df3 <- ggpredict(lm2, terms = c("income", "year"))
+df3_filtered <- df3[!(df3$x %in% c("Unemployed", "Student")), ]
+
+ggplot(df3_filtered, aes(x = factor(x), y = predicted, fill = factor(group, labels = c("Pre Trump (2008) ", "Post Trump (2020)")))) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.9), width = 0.7) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), 
+                position = position_dodge(width = 0.9), width = 0.25) +
+  labs(
+    x = "Employment Status",
+    y = "Predicted Value",
+    fill = "Year",
+    title = "Alien Thermometer with Employment Status"
+  ) +
+  scale_x_discrete(
+    labels = c("Working now", "Temporarily laid off", "Retired", "Permanently disabled", "Homemaker"),
+    name = "Employment Status"
+  ) +
+  scale_fill_manual(values = c("Pre Trump (2008) " = "blue", "Post Trump (2020)" = "red")) +  # Set fill colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#Immigrant Jobs Graph
+df4 <-ggpredict(lm1, terms=c("imm_job", "year"))
+
+ggplot(df4, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Likeliness that an Immigrant Will Take Jobs from Americans",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Predicted Values for Alien Thermometer Based on Immigrants Taking Jobs"
+  ) +
+  scale_x_continuous(
+    breaks = 1:4,
+    labels = c(
+      "Not at all likely", "Somewhat likely", "Very likely", "Extremely likely")
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Rotate x-axis labels
+```
+
+
+## Number of Immigrants Interactions
+
+
+```{r}
+#Time interaction with immigrant num DV
+lm3 <- lm(imm_num ~ as.factor(partyID_num) * year  + imm_job  + libcon + education + age_group + race + gender + employment_status + income,  data = complete_data, weights = VCF0009z)
+lm4 <- lm(imm_num ~ as.factor(partyID_num) + libcon * year  + imm_job  + education + age_group + race + gender + employment_status + income,  data = complete_data, weights = VCF0009z)
+```
+
+
+```{r}
+#Stargazer results
+stargazer(lm3, lm4, type="text",
+          digits = 3,
+           dep.var.labels=c("Number of Immigrants"),
+          covariate.labels = c("Weak Democrat", "Lean Democrat", "Independent", "Lean Republican", "Weak Republican", "Strong Republican", "Year","Belief Immigrants Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 -64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permanently Disabled", "Retired", "Student", "Temporarily  Laid Off", "Unemployed", "Working Now", "Income", "Weak Democrat by Year", "Lean Democrat by Year", "Independent by Year", "Lean Republican by Year", "Weak Republican by Year", "Strong Republican by Year", "Liberal Conservative Scale by Year"))
+```
+
+
+```{r}
+#Graph of Pary ID results
+df5 <-ggpredict(lm3, terms=c( "partyID_num", "year")) 
+
+
+ggplot(df5, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Party ID",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Number of Immigrants based on Party ID"
+  ) +
+  scale_x_continuous(
+    breaks = 1:7,
+    labels = c("Strong D", "Weak D", "Ind Lean D", "IND", "Ind Lean R", "Weak R", "Strong R")
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#Graph of predicted values of libcon
+df6 <-ggpredict(lm4, terms=c("libcon", "year")) 
+ggplot(df6, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Lib Con Scale",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Predicted Values for Number of Immigrants Based on Liberal/Cons Scale"
+  ) +
+  scale_x_continuous(
+    breaks = 1:7,
+    labels = c(
+      "Extremely liberal", "Liberal", "Slightly liberal", "Moderate",
+      "Slightly conservative", "Conservative", "Extremely conservative"
+    )
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#Cut from final draft for lack of space/Disregard
+df8 <- ggpredict(lm4, terms=c("imm_job", "year")) 
+
+ggplot(df8, aes(x = x, y = predicted, color = factor(group, labels = c("Pre Trump (2008)", "Post Trump (2020)")))) +
+  geom_line() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1) +
+  labs(
+    x = "Likeliness that an Immigrant Will Take Jobs from Americans",
+    y = "Predicted Value",
+    color = "Year",
+    title = "Number of Immigrants Based on Immigrants Taking Jobs"
+  ) +
+  scale_x_continuous(
+    breaks = 1:4,
+    labels = c(
+      "Not at all likely", "Somewhat likely", "Very likely", "Extremely likely")
+  ) +
+  scale_color_manual(values = c("Pre Trump (2008)" = "blue", "Post Trump (2020)" = "red")) +  # Set colors
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+#Stargazer for mediation regressions
+stargazer(model_m, model_y, type="text",
+          dep.var.labels = c("Immigrants Taking Jobs", "Illegal Alien Thermometer"),
+          covariate.labels = c("Party ID", "Belief Immigrant Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 - 64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permaneently Disabled", "Retired", "Student", "Temporarily Laid Off", "Unemployed", "Working Now", "Year", "Income") )
+```
+
+```{r}
+#Stargazer for Mediation Regressions
+stargazer(model_m2, model_y2, type="html",
+          out = "C:/Users/kmart/Downloads/mediationtable2.html",
+          dep.var.labels = c("Immigrants Taking Jobs", "Number of Immigrants"),
+          covariate.labels = c("Party ID", "Belief Immigrant Taking Jobs", "Liberal Conservative Scale", "High School Education", "No Education", "Some College", "Age Group 30 - 39", "Age Group 40 - 49", "Age Group 50 - 64", "Age Group 65+", "Race Asian", "Race Black", "Race Hispanic", "Race Other", "Race White", "Gender Male", "Permaneently Disabled", "Retired", "Student", "Temporarily Laid Off", "Unemployed", "Working Now", "Year", "Income"))
+```
+
+
+
+
+
