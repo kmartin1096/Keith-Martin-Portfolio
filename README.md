@@ -11,7 +11,7 @@ Trinity College (Class of 2020)
 • Performed data cleaning and analysis of 7000 ANES survey samples, employing time series regression and mediation analysis. <br>
 • Discovered significant increases in immigration attitudes among liberals and Democrats. <br>
 
-### Housing Data Price Prediction
+### [Housing Data Price Prediction](https://github.com/kmartin1096/Housing-Analysis)
 • Utilized machine learning techniques including Principal Component Analysis (PCA), Ridge and
 Lasso Regression, and Boosted Tree Models. <br>
 • Conducted comprehensive analysis to evaluate the predictability and interpretability trade-offs
